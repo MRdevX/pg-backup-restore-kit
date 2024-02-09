@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Import the configuration file
-source backup-config.sh
+source pg-backup-config.sh
 
 # Function to prompt user for environment
 choose_environment() {

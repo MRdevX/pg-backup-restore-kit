@@ -1,4 +1,4 @@
-# backup-config.sh
+# pg-restore-config.sh
 
 # PostgreSQL server connection information for local Docker container
 HOST="localhost"

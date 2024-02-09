@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Import the configuration file
-source restore-config.sh
+source pg-restore-config.sh
 
 # Function to restore a specific database
 restore_database() {

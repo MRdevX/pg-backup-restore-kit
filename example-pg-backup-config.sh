@@ -1,4 +1,4 @@
-# config.sh
+# pg-backup-config.sh
 
 # PostgreSQL server connection information
 DEV_HOST="dev_host"
