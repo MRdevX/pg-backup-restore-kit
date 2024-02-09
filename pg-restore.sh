@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# pg-restore.sh
+
+# This script provides functionality to restore PostgreSQL databases from backup.
+
+# It sources the pg-restore-config.sh file to import configuration settings.
+
+# The restore_database function takes a backup directory as an argument.
+
+# It lists the available folders in the backup directory and prompts the user to select one. 
+
+# It then lists the available backup files in the selected folder and prompts the user to select one.
+
+# The selected backup file can then be restored to the PostgreSQL database.
+
 # Import the configuration file
 source pg-restore-config.sh
 

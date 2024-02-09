@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# pg-backup.sh
+
+# This script performs PostgreSQL database backups for the specified environment and databases.
+
+# It imports the pg-backup-config.sh configuration file, prompts the user to select an environment, creates a dated backup directory, prompts the user to select databases to backup, and then performs the database backups using pg_dump.
+
+# The choose_environment function prompts the user to select DEV, STAG or PROD environment and sets the appropriate host, user, and database variables.
+
+# The choose_databases function prompts the user to select a comma-separated list of databases to backup from the available databases for that environment, and populates an array with the selected database names. 
+
+# After the environment and databases are selected, the backup_databases function performs the pg_dump backup for each selected database into dated files in the backup directory.
+
 # Import the configuration file
 source pg-backup-config.sh
 
