@@ -10,9 +10,9 @@
 
 # It lists the available folders in the backup directory and prompts the user to select one. 
 
-# It then lists the available backup files in the selected folder and prompts the user to select one.
+# It then lists the available backup files in the selected folder and prompts the user to select one or all.
 
-# The selected backup file can then be restored to the PostgreSQL database.
+# The selected backup file(s) can then be restored to the PostgreSQL database.
 
 # Import the configuration file
 source pg-restore-config.sh
@@ -56,22 +56,34 @@ restore_database() {
         echo "$(($index + 1)). $(basename "${DATABASE_FILES[$index]}")"
     done
 
-    # Prompt user for the selected backup file index
-    read -p "Enter the number of the backup file to restore: " SELECTED_BACKUP_INDEX
+    # Prompt user for the selected backup file index or all
+    read -p "Enter the number of the backup file to restore or 'all' to restore all files: " SELECTED_BACKUP_INDEX
 
-    if (( SELECTED_BACKUP_INDEX < 1 || SELECTED_BACKUP_INDEX > ${#DATABASE_FILES[@]} )); then
-        echo "Invalid backup file index. Please select a number between 1 and ${#DATABASE_FILES[@]}"
-        exit 1
+    if [ "$SELECTED_BACKUP_INDEX" == "all" ]; then
+        for BACKUP_FILE in "${DATABASE_FILES[@]}"; do
+            restore_single_database "$BACKUP_FILE"
+        done
+    else
+        if (( SELECTED_BACKUP_INDEX < 1 || SELECTED_BACKUP_INDEX > ${#DATABASE_FILES[@]} )); then
+            echo "Invalid backup file index. Please select a number between 1 and ${#DATABASE_FILES[@]}"
+            exit 1
+        fi
+
+        SELECTED_BACKUP_FILE_PATH="${DATABASE_FILES[$((SELECTED_BACKUP_INDEX - 1))]}"
+        restore_single_database "$SELECTED_BACKUP_FILE_PATH"
     fi
+}
 
-    SELECTED_BACKUP_FILE_PATH="${DATABASE_FILES[$((SELECTED_BACKUP_INDEX - 1))]}"
-    echo "Selected backup file: $(basename "$SELECTED_BACKUP_FILE_PATH")"
+# Function to restore a single database
+restore_single_database() {
+    local BACKUP_FILE_PATH="$1"
+    echo "Selected backup file: $(basename "$BACKUP_FILE_PATH")"
 
     # Extract the database name from the backup file name
-    DB_NAME=$(basename "$SELECTED_BACKUP_FILE_PATH" .backup | cut -d'_' -f1)
+    DB_NAME=$(basename "$BACKUP_FILE_PATH" .backup | cut -d'_' -f1)
 
     # Confirm before proceeding with the restore
-    read -p "You selected to restore database $DB_NAME from $(basename "$SELECTED_BACKUP_FILE_PATH"). Do you want to continue? (y/n): " confirm
+    read -p "You selected to restore database $DB_NAME from $(basename "$BACKUP_FILE_PATH"). Do you want to continue? (y/n): " confirm
     if [ "$confirm" != "y" ]; then
         echo "Restore operation aborted"
         exit 1
@@ -83,15 +95,13 @@ restore_database() {
 
     # Restore the selected backup file to the target database
     echo "Restoring database: $DB_NAME"
-    PGPASSWORD=$PASSWORD pg_restore -h $HOST -p $PORT -U $USER -d $DB_NAME --no-owner --no-privileges -F c "$SELECTED_BACKUP_FILE_PATH"
+    PGPASSWORD=$PASSWORD pg_restore -h $HOST -p $PORT -U $USER -d $DB_NAME --no-owner --no-privileges -F c "$BACKUP_FILE_PATH"
     if [ $? -eq 0 ]; then
         echo "Restore of database $DB_NAME completed successfully"
     else
         echo "Restore of database $DB_NAME failed"
     fi
 }
-
-
 
 # Confirm with the user before proceeding with the restore operation
 read -p "This will restore databases from folders inside $BACKUP_PARENT_DIR to $HOST:$PORT. Do you want to continue? (y/n): " choice
