@@ -93,6 +93,29 @@ restore_single_database() {
         exit 1
     fi
 
+    # Check if the database already exists
+    echo "Checking if database $DB_NAME exists..."
+    if PGPASSWORD=$PASSWORD psql -h $HOST -p $PORT -U $USER -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+        echo "Database $DB_NAME already exists."
+        read -p "Do you want to drop the existing database $DB_NAME before restoring? (y/n/abort): " drop_choice
+        if [[ "${drop_choice,,}" == "y" ]]; then
+            echo "Dropping existing database $DB_NAME..."
+            PGPASSWORD=$PASSWORD dropdb -h $HOST -p $PORT -U $USER $DB_NAME
+            if [ $? -ne 0 ]; then
+                echo "Failed to drop database $DB_NAME. Aborting restore operation."
+                exit 1
+            fi
+        elif [[ "${drop_choice,,}" == "abort" ]]; then
+            echo "Restore operation aborted"
+            exit 1
+        else
+            echo "Keeping existing database $DB_NAME"
+            return
+        fi
+    else
+        echo "Database $DB_NAME does not exist. It will be created."
+    fi
+
     # Create the database if it doesn't exist
     echo "Creating database if it doesn't exist: $DB_NAME"
     PGPASSWORD=$PASSWORD createdb -h $HOST -p $PORT -U $USER $DB_NAME
