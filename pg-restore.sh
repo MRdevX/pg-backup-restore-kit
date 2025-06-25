@@ -88,7 +88,7 @@ restore_single_database() {
 
     # Confirm before proceeding with the restore
     read -p "You selected to restore database $DB_NAME from $(basename "$BACKUP_FILE_PATH"). Do you want to continue? (y/n): " confirm
-    if [ "${$confirm,,}" != "y" ]; then
+    if [ "${confirm,,}" != "y" ]; then
         echo "Restore operation aborted"
         exit 1
     fi
