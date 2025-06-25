@@ -67,8 +67,10 @@ BACKUP_PARENT_DIR="your-backup-directory-path"
 1. Run the script `pg-restore.sh`.
 2. Confirm whether you want to proceed with the restore operation.
 3. Select a backup folder and then choose a backup file from within that folder for restoration.
-4. Confirm the selected database and backup file for restoration.
-5. The script will create the database (if it doesn't exist) and restore the selected backup file to it.
+4. Select the name of the database which will be written to
+5. Confirm the selected database and backup file for restoration.
+6. If the database exists, confirm if the database should be overwritten
+7. The script will create the database (if it doesn't exist) and restore the selected backup file to it.
 
 ## Script Overview
 
