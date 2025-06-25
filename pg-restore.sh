@@ -80,7 +80,7 @@ restore_single_database() {
     echo "Selected backup file: $(basename "$BACKUP_FILE_PATH")"
 
     # Extract the database name from the backup file name
-    DB_NAME=$(basename "$BACKUP_FILE_PATH" .backup | cut -d'_' -f1)
+    DEFAULT_DB_NAME=$(basename "$BACKUP_FILE_PATH" .backup | cut -d'_' -f1)
 
     # Prompt user for the database name to restore to
     read -p "Enter the database name to restore to (press enter for default: $DEFAULT_DB_NAME): " DB_NAME
