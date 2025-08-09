@@ -15,13 +15,64 @@
 # Import the configuration file
 source pg-backup-config.sh
 
+# Input validation functions
+validate_environment_choice() {
+    local choice="$1"
+    if [[ ! "$choice" =~ ^[1-3]$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
+validate_database_choices() {
+    local choices="$1"
+    local max_count="$2"
+    
+    # Check if input is empty
+    if [[ -z "$choices" ]]; then
+        return 1
+    fi
+    
+    # Check if input contains only valid characters
+    if [[ ! "$choices" =~ ^[0-9,]+$ ]]; then
+        return 1
+    fi
+    
+    # Check each choice
+    IFS=',' read -ra choices_array <<< "$choices"
+    for choice in "${choices_array[@]}"; do
+        if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 )) || (( choice > max_count )); then
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+validate_database_name() {
+    local db_name="$1"
+    # Check if database name is empty or contains invalid characters
+    if [[ -z "$db_name" ]] || [[ ! "$db_name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
 # Function to prompt user for environment
 choose_environment() {
     echo "Select environment:"
     echo "1. DEV"
     echo "2. STAG"
     echo "3. PROD"
-    read -p "Enter your choice (1/2/3): " ENV_CHOICE
+    
+    while true; do
+        read -p "Enter your choice (1/2/3): " ENV_CHOICE
+        if validate_environment_choice "$ENV_CHOICE"; then
+            break
+        else
+            echo "Invalid choice. Please enter 1, 2, or 3."
+        fi
+    done
 
     case $ENV_CHOICE in
         1) HOST=$DEV_HOST
@@ -33,9 +84,6 @@ choose_environment() {
         3) HOST=$PROD_HOST
            USER=$PROD_USER
            ;;
-        *) echo "Invalid choice. Please enter 1, 2, or 3."
-           choose_environment
-           ;;
     esac
 }
 
@@ -44,20 +92,38 @@ choose_databases() {
     local DATABASES=("$@")
     local DATABASE_CHOICES
     local DATABASE_ARRAY=()
+    selected_databases=()  # Initialize array
 
     echo "Select databases to backup (comma-separated):"
     for ((i=0; i<${#DATABASES[@]}; i++)); do
         echo "$(($i+1)). ${DATABASES[$i]}"
     done
 
-    read -p "Enter your choice(s) (comma-separated): " DATABASE_CHOICES
+    while true; do
+        read -p "Enter your choice(s) (comma-separated): " DATABASE_CHOICES
+        if validate_database_choices "$DATABASE_CHOICES" "${#DATABASES[@]}"; then
+            break
+        else
+            echo "Invalid input. Please enter valid numbers separated by commas (e.g., 1,2,3)."
+        fi
+    done
 
     IFS=',' read -ra DATABASE_ARRAY <<< "$DATABASE_CHOICES"
 
     for index in "${DATABASE_ARRAY[@]}"; do
-        selected_db=${DATABASES[$(($index-1))]}
-        selected_databases+=("$selected_db")
+        local selected_db="${DATABASES[$(($index-1))]}"
+        if validate_database_name "$selected_db"; then
+            selected_databases+=("$selected_db")
+        else
+            echo "Warning: Invalid database name '$selected_db' skipped."
+        fi
     done
+    
+    # Check if any valid databases were selected
+    if [[ ${#selected_databases[@]} -eq 0 ]]; then
+        echo "No valid databases selected. Exiting."
+        exit 1
+    fi
 }
 
 # Choose environment

@@ -17,6 +17,48 @@
 # Import the configuration file
 source pg-restore-config.sh
 
+# Input validation functions
+validate_folder_index() {
+    local index="$1"
+    local max_count="$2"
+    
+    if [[ ! "$index" =~ ^[0-9]+$ ]] || (( index < 1 )) || (( index > max_count )); then
+        return 1
+    fi
+    return 0
+}
+
+validate_backup_file_index() {
+    local index="$1"
+    local max_count="$2"
+    
+    if [[ "$index" == "all" ]]; then
+        return 0
+    fi
+    
+    if [[ ! "$index" =~ ^[0-9]+$ ]] || (( index < 1 )) || (( index > max_count )); then
+        return 1
+    fi
+    return 0
+}
+
+validate_database_name() {
+    local db_name="$1"
+    # Check if database name is empty or contains invalid characters
+    if [[ -z "$db_name" ]] || [[ ! "$db_name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
+validate_confirmation() {
+    local input="$1"
+    if [[ "${input,,}" =~ ^(y|yes|n|no)$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
 # Function to restore a specific database
 restore_database() {
     local BACKUP_DIR="$1"
@@ -34,12 +76,14 @@ restore_database() {
     done
 
     # Prompt user for the selected folder index
-    read -p "Enter the number of the backup folder to restore from: " SELECTED_FOLDER_INDEX
-
-    if (( SELECTED_FOLDER_INDEX < 1 || SELECTED_FOLDER_INDEX > ${#FOLDERS[@]} )); then
-        echo "Invalid folder index. Please select a number between 1 and ${#FOLDERS[@]}"
-        exit 1
-    fi
+    while true; do
+        read -p "Enter the number of the backup folder to restore from: " SELECTED_FOLDER_INDEX
+        if validate_folder_index "$SELECTED_FOLDER_INDEX" "${#FOLDERS[@]}"; then
+            break
+        else
+            echo "Invalid folder index. Please select a number between 1 and ${#FOLDERS[@]}"
+        fi
+    done
 
     SELECTED_FOLDER_PATH="${FOLDERS[$((SELECTED_FOLDER_INDEX - 1))]}"
     echo "Selected backup folder: $(basename "$SELECTED_FOLDER_PATH")"
@@ -57,18 +101,20 @@ restore_database() {
     done
 
     # Prompt user for the selected backup file index or all
-    read -p "Enter the number of the backup file to restore or 'all' to restore all files: " SELECTED_BACKUP_INDEX
+    while true; do
+        read -p "Enter the number of the backup file to restore or 'all' to restore all files: " SELECTED_BACKUP_INDEX
+        if validate_backup_file_index "$SELECTED_BACKUP_INDEX" "${#DATABASE_FILES[@]}"; then
+            break
+        else
+            echo "Invalid backup file index. Please select a number between 1 and ${#DATABASE_FILES[@]} or 'all'"
+        fi
+    done
 
     if [ "$SELECTED_BACKUP_INDEX" == "all" ]; then
         for BACKUP_FILE in "${DATABASE_FILES[@]}"; do
             restore_single_database "$BACKUP_FILE"
         done
     else
-        if (( SELECTED_BACKUP_INDEX < 1 || SELECTED_BACKUP_INDEX > ${#DATABASE_FILES[@]} )); then
-            echo "Invalid backup file index. Please select a number between 1 and ${#DATABASE_FILES[@]}"
-            exit 1
-        fi
-
         SELECTED_BACKUP_FILE_PATH="${DATABASE_FILES[$((SELECTED_BACKUP_INDEX - 1))]}"
         restore_single_database "$SELECTED_BACKUP_FILE_PATH"
     fi
@@ -81,37 +127,67 @@ restore_single_database() {
 
     # Extract the database name from the backup file name
     DB_NAME=$(basename "$BACKUP_FILE_PATH" .backup | cut -d'_' -f1)
-
-    # Prompt user for the database name to restore to
-    read -p "Enter the database name to restore to (press enter for default: $DB_NAME): " USER_DB_NAME
-    DB_NAME=${USER_DB_NAME:-$DB_NAME}
-
-    # Confirm before proceeding with the restore
-    read -p "You selected to restore database $DB_NAME from $(basename "$BACKUP_FILE_PATH"). Do you want to continue? (y/n): " confirm
-    if [ "${confirm,,}" != "y" ]; then
-        echo "Restore operation aborted"
+    
+    # Validate extracted database name
+    if ! validate_database_name "$DB_NAME"; then
+        echo "Error: Invalid database name extracted from backup file: $DB_NAME"
         exit 1
     fi
+
+    # Prompt user for the database name to restore to
+    while true; do
+        read -p "Enter the database name to restore to (press enter for default: $DB_NAME): " USER_DB_NAME
+        if [[ -z "$USER_DB_NAME" ]]; then
+            break
+        elif validate_database_name "$USER_DB_NAME"; then
+            DB_NAME="$USER_DB_NAME"
+            break
+        else
+            echo "Invalid database name. Database names must start with a letter or underscore and contain only letters, numbers, and underscores."
+        fi
+    done
+
+    # Confirm before proceeding with the restore
+    while true; do
+        read -p "You selected to restore database $DB_NAME from $(basename "$BACKUP_FILE_PATH"). Do you want to continue? (y/n): " confirm
+        if validate_confirmation "$confirm"; then
+            if [[ "${confirm,,}" =~ ^(y|yes)$ ]]; then
+                break
+            else
+                echo "Restore operation aborted"
+                exit 1
+            fi
+        else
+            echo "Please enter 'y' for yes or 'n' for no."
+        fi
+    done
 
     # Check if the database already exists
     echo "Checking if database $DB_NAME exists..."
     if PGPASSWORD=$PASSWORD psql -h $HOST -p $PORT -U $USER -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
         echo "Database $DB_NAME already exists."
-        read -p "Do you want to drop the existing database $DB_NAME before restoring? (y/n/abort): " drop_choice
-        if [[ "${drop_choice,,}" == "y" ]]; then
-            echo "Dropping existing database $DB_NAME..."
-            PGPASSWORD=$PASSWORD dropdb -h $HOST -p $PORT -U $USER $DB_NAME
-            if [ $? -ne 0 ]; then
-                echo "Failed to drop database $DB_NAME. Aborting restore operation."
-                exit 1
+        while true; do
+            read -p "Do you want to drop the existing database $DB_NAME before restoring? (y/n/abort): " drop_choice
+            if validate_confirmation "$drop_choice" || [[ "${drop_choice,,}" == "abort" ]]; then
+                if [[ "${drop_choice,,}" =~ ^(y|yes)$ ]]; then
+                    echo "Dropping existing database $DB_NAME..."
+                    PGPASSWORD=$PASSWORD dropdb -h $HOST -p $PORT -U $USER $DB_NAME
+                    if [ $? -ne 0 ]; then
+                        echo "Failed to drop database $DB_NAME. Aborting restore operation."
+                        exit 1
+                    fi
+                    break
+                elif [[ "${drop_choice,,}" == "abort" ]]; then
+                    echo "Restore operation aborted"
+                    exit 1
+                else
+                    echo "Keeping existing database $DB_NAME"
+                    return
+                fi
+            else
+                echo "Please enter 'y' for yes, 'n' for no, or 'abort' to cancel."
             fi
-        elif [[ "${drop_choice,,}" == "abort" ]]; then
-            echo "Restore operation aborted"
-            exit 1
-        else
-            echo "Keeping existing database $DB_NAME"
-            return
-        fi
+        done
     else
         echo "Database $DB_NAME does not exist. It will be created."
     fi
@@ -131,9 +207,14 @@ restore_single_database() {
 }
 
 # Confirm with the user before proceeding with the restore operation
-read -p "This will restore databases from folders inside $BACKUP_PARENT_DIR to $HOST:$PORT. Do you want to continue? (y/n): " choice
-case "$choice" in
-  y|Y ) restore_database "$BACKUP_PARENT_DIR";;
-  n|N ) echo "Restore operation aborted"; exit;;
-  * ) echo "Invalid choice";;
-esac
+while true; do
+    read -p "This will restore databases from folders inside $BACKUP_PARENT_DIR to $HOST:$PORT. Do you want to continue? (y/n): " choice
+    if validate_confirmation "$choice"; then
+        case "${choice,,}" in
+            y|yes) restore_database "$BACKUP_PARENT_DIR"; break;;
+            n|no) echo "Restore operation aborted"; exit 0;;
+        esac
+    else
+        echo "Please enter 'y' for yes or 'n' for no."
+    fi
+done
